@@ -1,0 +1,230 @@
+---
+title: "An inquiry into the influence of automatic vs manual transmission on fuel economy of cars in USA, 1974"
+author: "Eoin Sharkey"
+date: "March 4 - 22 , 2015"
+output: rmarkdown::tufte_handout
+---
+
+## Executive Summary
+
+It is America, 1974. Motorists are reeling from the impact of the oil-price shock. The price of gas has increased by over 40% in the previous year after decades of low or no increases[1].  So the fuel economy of cars, in miles per gallon (mpg) has become a hot topic for US motorists, notably the aficionados who subscribe to the leading popular technical publication _Motor Trends_. ^[Especially interesting is whether motorists need to move from automatic to manual transmission cars to achieve superior fuel economy. Clouding the issue is the number of other car design factors (weight, displacement and so on) which may impact fuel economy either independently of, or interacting with the transmission type.] ^[Newton's 2nd Law of Motion : $$\vec{F} = m\vec{a}$$]
+
+In this brief paper we will address the question : 
+
+```Which is better for fuel economy; automatic or manual, in the presence of these other factors_.```
+
+Noting that the  manual cars in the cohort studied have mean mpg significantly greater (`r round(mean(mtcars[mtcars$am==1,"mpg"]) - mean(mtcars[mtcars$am==0,"mpg"]),digits=0) ` mpg) than the automatic cars, we will show that manual transmission offers a small (~0.8 mpg) fuel economy over automatic for a hypothetical car of average weight and performance (measured by QSec) - however the error associated with the prediction means any difference may not be statistically significant. We will offer some reasons for the difference between the observed and modelled cases and make suggestions for further study.     
+
+## Data Collection
+
+For this analysis we used the mtcars data, part of standard R distribution[2]. Data was loaded and processed using the R programming language [3]. This consists of `r length(mtcars[[1]]) ` records, each for 1 make of car.
+
+For each record `r length(mtcars) - 1` observations including fuel economy (miles per gallon or mpg), weight (wt in units of 1,000 lb), automatic (0) or manual (1) transmission (am), Qsec (seconds to travel a quarter-mile), displacement (disp in units of cubic inches) and so on. 
+
+```{r, results='asis',fig.margin=TRUE,echo=FALSE,warning=FALSE,fig.cap = "Part of the _mtcars_ data"}
+library(xtable)
+options(xtable.comment = FALSE)
+options(xtable.booktabs = TRUE)
+xtable(head(mtcars[c(1:3,29:32),1:6],3),digits=
+         c(0,1,0,0,0,0,1))
+
+```
+\begin{marginfigure}
+\begin{tabular}{ l p{3.3 cm}}
+    \hline
+    mpg & fuel economy \\
+    & (miles per gallon) \\
+    am & automatic(1) or \\
+    & manual (1) \\
+    qsec & Seconds to quarter-mile \\ 
+    disp & Displacement($in^3$) \\
+    hp & horsepower \\
+    drat & drive ratio \\
+    \hline
+    \end{tabular}
+    \caption{Key fields}
+\end{marginfigure}
+
+## Exploratory Analysis
+Exploratory analysis was by examining tables and plots of the downloaded data. Inspection using complete.cases() and the summary() command within r reveals no missing or anomalous data.  We noted high-levels of correlation between the variables which suggests multi-variable models possibly with interaction terms may be appropriate. Observing that weight (wt) was a highly influential variable we constructed simple linear models for the different classes of transmission. 
+```{r, error=FALSE, echo=FALSE, warning=FALSE,fig.margin = TRUE,fig.height= 3.5, fig.cap = "Initial linear models"}
+require(ggplot2)
+mtcars$amNamed<-factor(mtcars$am,labels=c("0= Automatic","1 = Manual"))
+qplot(wt,mpg,data=mtcars, colour=amNamed)+ geom_smooth(method="lm")+theme_bw()+labs(x="Weight (1,000 Lbs)",y="Miles per Gallon",colour="Transmission Type")+theme(legend.position="top")
+```
+We noted that the mean value for mpg was widely different for manual (`r round(mean(mtcars[mtcars$am==1,"mpg"]),digits=1) `) vs automatic (`r round(mean(mtcars[mtcars$am==0,"mpg"]),digits=1) `), and confirmed the difference (`r round(mean(mtcars[mtcars$am==1,"mpg"]) - mean(mtcars[mtcars$am==0,"mpg"]),digits=1) `) was significant with Student's T-test (95%CI : `r round(t.test(mpg~factor(am,levels=c(1,0)),data=mtcars)$conf.int,digits=2) `)
+
+## Statistical Modelling Methods
+To relate fuel-economy with other vehicle characteristics we constructed a series of linear regression models, which were tested using the linear-model and ANOVA functions of [2]. The goal of a 'parsimonious' model was pursued using the simple technique outlined by King[4]. 
+
+Models built are reported in the Appendix where standard parameters including adj-R^2^, RSS and the p-values for constant and co-efficient terms are given.
+
+## Model-building and evaluation
+```{r ModelCode, echo=FALSE, results='hide',warning=FALSE, message=FALSE,cache=TRUE} 
+#This block is to make sure the results as available for the rest of the document
+
+car1<-lm(mpg~.,data=mtcars)
+
+car1a<-lm(mpg~as.factor(cyl)+disp+hp+drat+wt+qsec+as.factor(vs)+as.factor(am)+as.factor(gear)+as.factor(carb),data=mtcars)
+
+
+
+car2a<-update(car1a,.~. - as.factor(carb))
+
+
+anova(car1a,car2a)
+
+car3a<-update(car2a,.~. - as.factor(gear))
+
+
+car4a<-update(car3a,.~. - as.factor(cyl))
+summary(car4a)
+
+car5a<-update(car4a,.~. - as.factor(vs))
+summary(car5a)
+
+car6a<-update(car5a,.~. - drat)
+summary(car6a)
+
+car7a<-update(car6a,.~. - disp)
+summary(car7a)
+
+car8a<-update(car7a,.~. - hp)
+summary(car8a)
+
+car8aInter<-lm(mpg~as.factor(am)+wt+qsec+wt:qsec+as.factor(am):wt+as.factor(am):qsec,data=mtcars)
+summary(car8aInter)
+anova(car8a,car8aInter)
+
+car8aInter2<-lm(mpg~as.factor(am)+wt+qsec+as.factor(am):wt,data=mtcars)
+summary(car8aInter2)
+anova(car8a,car8aInter2)
+
+finaltab<-confint(car8aInter2)
+finaltab<-cbind(finaltab,as.vector(coef(car8aInter2)))
+colnames(finaltab)<-c("2.5% CI","97.5% CI","Mean")
+#we posit that this (8a) is the minimal something model
+
+anova(car1a,car8a)
+anova(car8a,car1a)
+
+#following is to get some data on typical cars :
+newxLow<-cbind("wt"=c(quantile(mtcars$wt,0.25),quantile(mtcars$wt,0.25)),
+             "am"=c(0,1),"qsec"=c(quantile(mtcars$qsec,0.75),
+                                  quantile(mtcars$qsec,0.75)))
+predict(car8aInter2,newdata=data.frame(newxLow),interval="confidence")
+
+newxHigh<-cbind("wt"=c(quantile(mtcars$wt,0.75),quantile(mtcars$wt,0.75)),
+             "am"=c(0,1),"qsec"=c(quantile(mtcars$qsec,0.25),
+                                  quantile(mtcars$qsec,0.25)))
+predict(car8aInter2,newdata=data.frame(newxHigh),interval="confidence")
+
+
+
+
+```
+
+
+```{r results='asis',warning=FALSE,echo=FALSE,message=FALSE,fig.margin = TRUE,fig.height= 3.0}
+
+
+plot(car8a,which=1,main="Model w/o interaction terms")
+plot(car8aInter2,which=1,main="Model with interaction terms")
+
+```
+
+Starting with a full model (lm(mpg~.)), terms were successively removed using commands of the form (update(prevLM, .~. -LST)) where LST is the 'least significant term' as measured by the (significance of) the t-value.
+
+This resulted in a parsimonious model with 3 predictor variables. Inspection of  residuals (see Table 3) revealed a parabolic shape characteristic of an interaction term being required. 
+
+
+Therefore models with interaction terms were developed and after inspection of model differences using ANOVA, a final model with a single interaction term was chosen - see sidebar: 
+
+
+\begin{marginfigure}
+
+ $MPG_i = \beta_0 + \beta_1 WT_i + \beta_2 QSec_i + \beta_3 AM_i + \beta_4 WT_i*AM_i + \epsilon_{i}$
+ 
+ where $\ WT_i$ is weight ,$\ Qsec_i$ is seconds to travel quarter-mile, $\ AM_i$ is automatic vs Manual transmission $\ AM_i*WT_i$ is the interaction between those terms and $\epsilon_{i}$ represent error and we assume  $\epsilon_{i} \sim N(0, \sigma^2)$
+
+\caption{Final model equation}
+\end{marginfigure}
+
+Co-efficient mean values and 95% CI are given in the table below. Also shown are  predicted fit values (and 95% CI limits) for a hypothetical car with mean values for weight and QSec performance.  
+Our model shows that a car with manual transmission has 14.08 better mpg than an automatic,that every additional 1,000 Lb weight reduces fuel economy by an average -2.94 mpg and that each additional second per quartermile adds 1.02 to mpg  _holding all other variables constant_, and also that a car with manual transmission has a steeper response curve to weight - with the slope increasing from -2.94 by an additional -4.14 mpg for a manual car.  
+
+```{r,echo=FALSE,results='asis',warning=FALSE,message=FALSE,dependson="ModelCode",fig.margin=TRUE}
+require(xtable)
+print(xtable(finaltab,digits=2),comment=FALSE)
+
+newx<-cbind("wt"=c(mean(mtcars$wt),mean(mtcars$wt)),
+            "am"=c(0,1),"qsec"=c(mean(mtcars$qsec),
+                                 mean(mtcars$qsec)))
+predtable<-predict(car8aInter2,newdata=data.frame(newx),interval="confidence")
+rownames(predtable)<-c("Automatic","Manual")
+print(xtable(predtable,digits=2,caption="Using the model to predict mpg for cars with mean values of weight (wt)and QSec (qsec) for manual and automatic transmission"),comment=FALSE)
+
+newx2<-cbind("wt"=quantile(mtcars$wt,rep(seq(0.1,0.9,0.1),2)),
+             "am"=c(rep(0,9),rep(1,9)),"qsec"=quantile(mtcars$qsec,rep(seq(0.9,0.1,-0.1),2)))
+rownames(newx2)<-c(rep("A",9),rep("M",9))
+predtable2<-predict(car8aInter2,newdata=data.frame(newx2),interval="confidence")
+newx2<-cbind(newx2,predtable2) #add the predicted values back into the hypothetical 
+```
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE,fig.width = 10, fig.height = 4, fig.fullwidth = TRUE, fig.cap = "Distribution of mpg for observed and modelled(fitted) values for Manualand Automatic cars"}
+boxplot(mpg~factor(am,labels=c("A","M")),data=mtcars,horizontal=TRUE,pars=list(boxcol="darkgrey",boxfill="transparent",medcol="darkgrey", medbg="darkgrey", whiskcol="darkgrey", staplecol="darkgrey"))
+
+fitplot<-boxplot(car8aInter2$fitted~mtcars$am,plot=FALSE)
+bxp(fitplot,add=TRUE,boxwex=.5, horizontal=TRUE, pars=list(boxcol="blue",boxfill="transparent",medcol="blue", medbg="blue", axes= FALSE, whiskcol="blue", staplecol="blue"))
+
+predplot<-boxplot(fit~am,plot=FALSE,data=newx2)
+bxp(predplot,add=TRUE,boxwex=.33, horizontal=TRUE, pars=list(boxcol="red",boxfill="transparent",medlty= "dashed",medcol="red", medbg="red", axes= FALSE, whiskcol="red", staplecol="red"))
+
+legend("bottomright",c("Observed","Fitted (model)","Predicted (model)"),text.col=c("darkgrey","blue","red"))
+
+```
+
+Results for our 'average' car show, that actually there is little difference in the mpg between automatic and manual, furthermore the wide (and overlapping) error bands mean the results are likely not to be statistically significant.
+
+Building on this interesting result, we create some additional data; a set of 18 hypothetical cars, 9 auto, 9 manual where the weight of the cars runs from the 10% quantile to the 90% in even steps and the qsec performance runs in the opposite direction : in essence we are designing cars which range from light, but slow to heavy and fast. 
+
+
+## Conclusion 
+How do we explain the paradox that our data plainly shows a significant benefit in mpg for manual _vice_ automatic cars, but our model despite being carefully constructed to maximise adj-R^2^ and minimise RSS while keeping only significant terms shows only a small, possibly not statistically significant, difference. Either 
+
+a) We failed to build a good predictive model, either because we omitted variables which might have been important during the model tuning phase or because they are not available in the in original data-set (unknown unknowns) 
+
+b) Our model is sound, and the effects of (automatic vs manual) tranmsission alone are rather small, and what really contributes to fuel economy are other car design parameters such as weight and the 'tuning' of the car for performance or economy (represented by Qsec in our model). In this case we assert that manual vs automatic transmission may simply reflect a choice by the vehicle manufacturer, and we will note that the manual cars in the data are almost all non-US made, while the automatic cars are overwhelmingly US made.
+
+These results can only be applied to the sample data since we have no means of knowing if they are representative of the population of cars available generally - future research might look at this shortcoming. 
+We should be careful about over-fitting any model to such a limited data-set, and future work might include model-building with some form of cross-validation technique applied to guard against this.
+
+------
+## Appendix
+
+
+```{r results='asis', echo=FALSE,message=FALSE,warning=FALSE}
+library(xtable)
+options(xtable.booktabs = FALSE)
+print(xtable(mtcars[order(mtcars$mpg),c(1:11)],caption="The full mtcars data-set",digits=c(0,1,0,0,0,2,2,2,0,0,0,0)),comment=FALSE,caption.placement="top",
+      )
+```
+
+```{r results='asis',warning=FALSE,echo=FALSE,message=FALSE,fig.height=2.5}
+
+options(xtable.booktabs = FALSE)
+print(xtable(anova(car3a,car8a,car8aInter2),digits=2,caption ="Plot of Fitted vs Residuals and Comparison of models, (1) = Intermediate Model, (2) = Parsimonious model with no interaction terms, (3) = Final model with a single interaction term"),comment=FALSE)
+require(stargazer)
+stargazer(car3a,car8a,car8aInter2,type="latex",title="Comparison of Models (1) = intermediate model with 8 predictors, (2) = Select parsimonious model with 3 predictors, (3) = Parsimonious model with most significant interaction term added. Numbers in brackets are the Standard Error for each co-efficient.",header=FALSE,
+          font.size="small")
+```
+
+## References 
+
+[1]:"First oil-price shock" as referenced in http://en.wikipedia.org/wiki/1973_oil_crisis, accesssed on 12/Mar 2015.
+
+[2]: R Core Team (2014). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL http://www.R-project.org/.
+
+[3]: Henderson and Velleman (1981), Building multiple regression models interactively. Biometrics, 37, 391-411 (not accessed)
+
+[4]: "Tutorial on Multiple Regression", author William B. King as published : http://ww2.coastal.edu/kingw/statistics/R-tutorials/multregr.html, accessed on 17/Mar 2015.
